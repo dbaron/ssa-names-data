@@ -1,6 +1,9 @@
 <!DOCTYPE HTML>
 <meta charset=UTF-8>
 <title>SSA Baby Names</title>
+<style>
+td.ratio { background: white; color: black }
+</style>
 <script>
 
 var gDefaults = {
@@ -118,7 +121,6 @@ function update_ui() {
     names_table.textContent = "";
     document.getElementById("table_year_1").textContent = gState.year;
     document.getElementById("table_year_2").textContent = gState.year;
-    console.log(gComputedData.top_names);
     for (let index in gComputedData.top_names) {
         let tr = document.createElement("tr");
 
@@ -126,6 +128,16 @@ function update_ui() {
             let cell = document.createElement("td");
             cell.appendChild(document.createTextNode(text));
             tr.appendChild(cell);
+            return cell;
+        }
+
+        function make_ratio_cell(ratio) {
+            let cell = make_cell(ratio.toPrecision(3));
+            cell.className = "ratio";
+            let bar_color = "#fc0";
+            let background_color = "white";
+            let bar_position = (ratio * 100).toFixed() + "%";
+            cell.style.backgroundImage = `linear-gradient(to right, ${bar_color}, ${bar_color} ${bar_position}, ${background_color} ${bar_position}, ${background_color})`;
         }
 
         function make_percent(num) {
@@ -142,14 +154,14 @@ function update_ui() {
         let highest_year_fraction = gComputedData.names_highest_fraction[name];
         make_cell(highest_year_fraction.year);
         make_cell(make_percent(highest_year_fraction.fraction));
-        make_cell((this_year_fraction / highest_year_fraction.fraction).toPrecision(3));
+        make_ratio_cell(this_year_fraction / highest_year_fraction.fraction);
 
         let this_year_count = gComputedData.names_this_year[name].count;
         make_cell(this_year_count);
         let highest_year_count = gComputedData.names_highest_count[name];
         make_cell(highest_year_count.year);
         make_cell(highest_year_count.count);
-        make_cell((this_year_count / highest_year_count.count).toPrecision(3));
+        make_ratio_cell(this_year_count / highest_year_count.count);
 
         names_table.appendChild(tr);
     }
@@ -214,7 +226,6 @@ function update_current_data() {
 
             // Add common names to the list (FIXME: make threshold configurable)
             if (fraction >= 0.001) {
-                console.log(name);
                 top_names.push(name);
             }
         }
