@@ -1,0 +1,254 @@
+<!DOCTYPE HTML>
+<meta charset=UTF-8>
+<title>SSA Baby Names</title>
+<script>
+
+var gDefaults = {
+    sex: "M",
+    //year: 2018, // default handled in read_names_data()
+};
+function gethash() {
+    var hash = {};
+    if (window.location.hash != "") {
+        try {
+            hash = JSON.parse(unescape(window.location.hash.substring(1)));
+        } catch(ex) {}
+    }
+    for (var prop in gDefaults) {
+        if (!(prop in hash)) {
+            hash[prop] = gDefaults[prop];
+        }
+    }
+    return hash;
+}
+
+function sethash(json) {
+    let newhash = escape(JSON.stringify(json));
+    if (window.location.hash != newhash) {
+        window.location.hash = newhash;
+    }
+}
+
+function set_suppress_change(select_element, do_suppress) {
+    if (do_suppress) {
+        select_element.setAttribute("data-suppress-change", "true");
+    } else {
+        select_element.removeAttribute("data-suppress-change");
+    }
+}
+
+function should_suppress_change(select_element) {
+    return select_element.hasAttribute("data-suppress-change");
+}
+
+var gState;
+var gData;
+
+function dom_load_handler() {
+    gState = gethash();
+
+    read_names_data();
+
+    let sex_select = document.getElementById("sex");
+    sex_select.addEventListener("change", function sex_select_change(event) {
+        if (should_suppress_change(sex_select)) {
+            return;
+        }
+        gState.sex = sex_select.value;
+        state_changed();
+    });
+
+    let year_select = document.getElementById("year");
+    year_select.addEventListener("change", function year_select_change(event) {
+        if (should_suppress_change(year_select)) {
+            return;
+        }
+        gState.year = year_select.value;
+        state_changed();
+    });
+
+    hashchange_listener();
+}
+
+function hashchange_listener() {
+    gState = gethash();
+    sethash(gState);
+    update_ui();
+}
+
+function state_changed() {
+    sethash(gState);
+    update_ui();
+}
+
+window.addEventListener("DOMContentLoaded", dom_load_handler);
+window.addEventListener("hashchange", hashchange_listener);
+
+function update_ui() {
+    let sex_select = document.getElementById("sex");
+    if (sex_select.value != gState.sex) {
+        set_suppress_change(sex_select, true);
+        sex_select.value = gState.sex;
+        set_suppress_change(sex_select, false);
+    }
+
+    if (!gData) {
+        return;
+    }
+
+    let year_select = document.getElementById("year");
+    if (year_select.firstChild.value == "loading") {
+        year_select.removeChild(year_select.firstChild);
+        for (let year = gData.min_year; year <= gData.max_year; ++year) {
+            let option = document.createElement("option");
+            option.appendChild(document.createTextNode(year));
+            option.value = year;
+            year_select.appendChild(option);
+        }
+    }
+    if (year_select.value != gState.year) {
+        set_suppress_change(year_select, true);
+        year_select.value = gState.year;
+        set_suppress_change(year_select, false);
+    }
+
+    update_current_data();
+
+    let names_table = document.getElementById("names");
+    names_table.textContent = "";
+    let names_table_year = document.getElementById("table_year");
+    names_table_year.textContent = gState.year;
+    console.log(gComputedData.top_names);
+    for (let index in gComputedData.top_names) {
+        let tr = document.createElement("tr");
+
+        function make_cell(text) {
+            let cell = document.createElement("td");
+            cell.appendChild(document.createTextNode(text));
+            tr.appendChild(cell);
+        }
+
+        function make_percent(num) {
+            return (num * 100).toPrecision(3) + "%";
+        }
+
+        let rank = Number(index) + 1;
+        let name = gComputedData.top_names[index];
+        make_cell(rank);
+        make_cell(name);
+        let this_year_fraction = gComputedData.names_this_year[name];
+        make_cell(make_percent(this_year_fraction));
+        let highest_year = gComputedData.names_highest_year[name];
+        make_cell(highest_year.year);
+        make_cell(make_percent(highest_year.fraction));
+        make_cell((this_year_fraction / highest_year.fraction).toPrecision(3));
+
+        names_table.appendChild(tr);
+    }
+
+}
+
+var gComputedData = {
+  sex: null,
+  year: null,
+  names_highest_year: null,
+  names_this_year: null,
+  top_names: null,
+};
+
+function update_current_data() {
+    let names = (gState.sex == "M") ? gData.male_names : gData.female_names;
+    let totals = (gState.sex == "M") ? gData.male_totals : gData.female_totals;
+
+    let names_highest_year = gComputedData.names_highest_year;
+    if (gComputedData.sex != gState.sex) {
+        names_highest_year = {};
+        for (let name in names) {
+            let counts = names[name];
+            let highest_year = null;
+            let highest_fraction = 0;
+            for (let index in counts) {
+                let fraction = counts[index] / totals[index];
+                // Prefer the newest year in case of ties.
+                if (fraction >= highest_fraction) {
+                    highest_fraction = fraction;
+                    highest_year = Number(index) + gData.min_year;
+                }
+            }
+            names_highest_year[name] = { year: highest_year, fraction: highest_fraction };
+        }
+        gComputedData.names_highest_year = names_highest_year;
+    }
+
+    let names_this_year = gComputedData.names_this_year;
+    if (gComputedData.sex != gState.sex || gComputedData.year != gState.year) {
+        let top_names = [];
+        names_this_year = {};
+        for (let name in names) {
+            let index = gState.year - gData.min_year;
+            let count = names[name][index];
+            let total = totals[index]
+            let fraction = count / total;
+            names_this_year[name] = fraction;
+
+            if (name == "David") {
+                console.log(name, index, count, total, fraction);
+            }
+
+            // Add common names to the list (FIXME: make threshold configurable)
+            if (fraction >= 0.001) {
+                console.log(name);
+                top_names.push(name);
+            }
+        }
+        gComputedData.names_this_year = names_this_year;
+
+        top_names.sort(function sort_names(n1, n2) { return names_this_year[n2] - names_this_year[n1]; });
+
+        gComputedData.top_names = top_names;
+
+    }
+
+    gComputedData.sex = gState.sex;
+    gComputedData.year = gState.year;
+}
+
+function read_names_data() {
+    return fetch(new Request("national-data.json")).then(function data_load(response) {
+        return response.json();
+    }).then(function check_json(json) {
+        gData = json;
+
+        if (!("year" in gState)) {
+            gState.year = gData.max_year;
+        }
+
+        update_ui();
+    });
+}
+
+</script>
+<h1>SSA Baby Names</h1>
+
+<select id="sex">
+  <option value="F">Female</option>
+  <option value="M">Male</option>
+</select>
+<select id="year"><option value="loading">Loading...</option></select>
+
+<table border>
+<thead>
+  <tr>
+    <th rowspan="2">Rank</th>
+    <th rowspan="2">Name</th>
+    <th id="table_year"></th>
+    <th colspan="2">Highest Year</th>
+    <th rowspan="2">Ratio</th>
+  </tr>
+  <tr>
+    <th>Fraction</th>
+    <th>Year</th>
+    <th>Fraction</th>
+  </tr>
+</thead>
+<tbody id="names"></tbody></table>
