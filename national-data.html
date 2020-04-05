@@ -116,8 +116,8 @@ function update_ui() {
 
     let names_table = document.getElementById("names");
     names_table.textContent = "";
-    let names_table_year = document.getElementById("table_year");
-    names_table_year.textContent = gState.year;
+    document.getElementById("table_year_1").textContent = gState.year;
+    document.getElementById("table_year_2").textContent = gState.year;
     console.log(gComputedData.top_names);
     for (let index in gComputedData.top_names) {
         let tr = document.createElement("tr");
@@ -136,12 +136,20 @@ function update_ui() {
         let name = gComputedData.top_names[index];
         make_cell(rank);
         make_cell(name);
-        let this_year_fraction = gComputedData.names_this_year[name];
+
+        let this_year_fraction = gComputedData.names_this_year[name].fraction;
         make_cell(make_percent(this_year_fraction));
-        let highest_year = gComputedData.names_highest_year[name];
-        make_cell(highest_year.year);
-        make_cell(make_percent(highest_year.fraction));
-        make_cell((this_year_fraction / highest_year.fraction).toPrecision(3));
+        let highest_year_fraction = gComputedData.names_highest_fraction[name];
+        make_cell(highest_year_fraction.year);
+        make_cell(make_percent(highest_year_fraction.fraction));
+        make_cell((this_year_fraction / highest_year_fraction.fraction).toPrecision(3));
+
+        let this_year_count = gComputedData.names_this_year[name].count;
+        make_cell(this_year_count);
+        let highest_year_count = gComputedData.names_highest_count[name];
+        make_cell(highest_year_count.year);
+        make_cell(highest_year_count.count);
+        make_cell((this_year_count / highest_year_count.count).toPrecision(3));
 
         names_table.appendChild(tr);
     }
@@ -151,7 +159,8 @@ function update_ui() {
 var gComputedData = {
   sex: null,
   year: null,
-  names_highest_year: null,
+  names_highest_fraction: null,
+  names_highest_count: null,
   names_this_year: null,
   top_names: null,
 };
@@ -160,24 +169,36 @@ function update_current_data() {
     let names = (gState.sex == "M") ? gData.male_names : gData.female_names;
     let totals = (gState.sex == "M") ? gData.male_totals : gData.female_totals;
 
-    let names_highest_year = gComputedData.names_highest_year;
+    let names_highest_fraction = gComputedData.names_highest_fraction;
     if (gComputedData.sex != gState.sex) {
-        names_highest_year = {};
+        names_highest_fraction = {};
+        names_highest_count = {};
         for (let name in names) {
             let counts = names[name];
-            let highest_year = null;
+            let highest_fraction_year = null;
             let highest_fraction = 0;
+            let highest_count_year = null;
+            let highest_count = 0;
             for (let index in counts) {
-                let fraction = counts[index] / totals[index];
+                let count = counts[index];
+                // Prefer the newest year in case of ties.
+                if (count >= highest_count) {
+                    highest_count = count;
+                    highest_count_year = Number(index) + gData.min_year;
+                }
+
+                let fraction = count / totals[index];
                 // Prefer the newest year in case of ties.
                 if (fraction >= highest_fraction) {
                     highest_fraction = fraction;
-                    highest_year = Number(index) + gData.min_year;
+                    highest_fraction_year = Number(index) + gData.min_year;
                 }
             }
-            names_highest_year[name] = { year: highest_year, fraction: highest_fraction };
+            names_highest_count[name] = { year: highest_count_year, count: highest_count };
+            names_highest_fraction[name] = { year: highest_fraction_year, fraction: highest_fraction };
         }
-        gComputedData.names_highest_year = names_highest_year;
+        gComputedData.names_highest_fraction = names_highest_fraction;
+        gComputedData.names_highest_count = names_highest_count;
     }
 
     let names_this_year = gComputedData.names_this_year;
@@ -189,11 +210,7 @@ function update_current_data() {
             let count = names[name][index];
             let total = totals[index]
             let fraction = count / total;
-            names_this_year[name] = fraction;
-
-            if (name == "David") {
-                console.log(name, index, count, total, fraction);
-            }
+            names_this_year[name] = { fraction, count };
 
             // Add common names to the list (FIXME: make threshold configurable)
             if (fraction >= 0.001) {
@@ -203,7 +220,7 @@ function update_current_data() {
         }
         gComputedData.names_this_year = names_this_year;
 
-        top_names.sort(function sort_names(n1, n2) { return names_this_year[n2] - names_this_year[n1]; });
+        top_names.sort(function sort_names(n1, n2) { return names_this_year[n2].count - names_this_year[n1].count; });
 
         gComputedData.top_names = top_names;
 
@@ -239,9 +256,16 @@ function read_names_data() {
 <table border>
 <thead>
   <tr>
-    <th rowspan="2">Rank</th>
-    <th rowspan="2">Name</th>
-    <th id="table_year"></th>
+    <th rowspan="3">Rank</th>
+    <th rowspan="3">Name</th>
+    <th colspan="4">By Fraction of Population</th>
+    <th colspan="4">By Count</th>
+  </tr>
+  <tr>
+    <th id="table_year_1"></th>
+    <th colspan="2">Highest Year</th>
+    <th rowspan="2">Ratio</th>
+    <th id="table_year_2"></th>
     <th colspan="2">Highest Year</th>
     <th rowspan="2">Ratio</th>
   </tr>
@@ -249,6 +273,9 @@ function read_names_data() {
     <th>Fraction</th>
     <th>Year</th>
     <th>Fraction</th>
+    <th>Count</th>
+    <th>Year</th>
+    <th>Count</th>
   </tr>
 </thead>
 <tbody id="names"></tbody></table>
