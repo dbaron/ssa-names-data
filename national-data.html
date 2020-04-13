@@ -336,11 +336,12 @@ function read_names_data() {
     }).then(function check_json(json) {
         gData = json;
 
-        if (!("year" in gState)) {
+        if ("year" in gState) {
+            update_ui();
+        } else {
             gState.year = gData.max_year;
+            state_changed();
         }
-
-        update_ui();
     });
 }
 
