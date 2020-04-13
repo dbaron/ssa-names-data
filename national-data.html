@@ -3,6 +3,11 @@
 <title>SSA Baby Names</title>
 <style>
 td.ratio { background: white; color: black }
+body.showingGraph > #section-name-table { display: none }
+body:not(.showingGraph) > #section-graph { display: none }
+canvas#graph-canvas {
+    border: medium solid black;
+}
 </style>
 <script>
 
@@ -117,6 +122,75 @@ function update_ui() {
 
     update_current_data();
 
+    let graph_table = document.getElementById("graph-table");
+    graph_table.textContent = "";
+
+    let showGraph = "graphName" in gState;
+    if (showGraph) {
+        document.body.classList.add("showingGraph");
+
+        let name = gState.graphName;
+        let type = gState.graphType;
+
+        document.getElementById("graph-name").textContent = name;
+        document.getElementById("graph-type").textContent = type[0].toUpperCase() + type.slice(1);
+
+        let values = [];
+        for (let year = gData.min_year, index = 0; year <= gData.max_year; ++year, ++index) {
+            let tr = document.createElement("tr");
+
+            let make_cell = function make_graph_cell(text) {
+                let cell = document.createElement("td");
+                cell.appendChild(document.createTextNode(text));
+                tr.appendChild(cell);
+                return cell;
+            }
+
+            make_cell(year);
+
+            let counts = ((gState.sex == "M") ? gData.male_names : gData.female_names)[name];
+            if (type == "fraction") {
+                let totals = (gState.sex == "M") ? gData.male_totals : gData.female_totals;
+                let val = (counts[index]/totals[index]) * 100;
+                make_cell(val.toPrecision(3) + "%");
+                values.push(val);
+            } else if (type == "count") {
+                let val = counts[index];
+                make_cell(val);
+                values.push(val);
+            }
+
+            graph_table.appendChild(tr);
+        }
+
+        let canvas = document.getElementById("graph-canvas");
+        let h = canvas.height;
+        let w = canvas.width;
+        let cx = canvas.getContext("2d");
+        cx.clearRect(0, 0, w, h);
+        let max_value = Math.max.apply(null, values);
+        let max_index = values.length - 1;
+
+        let path_string = "";
+        let next_command = "M";
+        for (let index in values) {
+            let val = values[index];
+            let x = (index / max_index) * w;
+            let y = (1 - (val / max_value)) * h
+
+            path_string += `${next_command}${x.toFixed(1)},${y.toFixed(1)} `;
+
+            next_command = "L";
+        }
+
+        cx.strokeStyle = "#900";
+        cx.stroke(new Path2D(path_string));
+
+        return;
+    }
+
+    document.body.classList.remove("showingGraph");
+
     let names_table = document.getElementById("names");
     names_table.textContent = "";
     document.getElementById("table_year_1").textContent = gState.year;
@@ -124,11 +198,21 @@ function update_ui() {
     for (let index in gComputedData.top_names) {
         let tr = document.createElement("tr");
 
-        function make_cell(text) {
+        let make_cell = function make_names_cell(text) {
             let cell = document.createElement("td");
             cell.appendChild(document.createTextNode(text));
             tr.appendChild(cell);
             return cell;
+        }
+
+        function append_graph_link(cell, name, type) {
+            cell.firstChild.appendData(" (");
+            let a = document.createElement("a");
+            // If only javascript: URLs had a useful `this`, we could do this in a less risky way...
+            a.href = `javascript:show_graph("${name}", "${type}")`;
+            a.textContent = "graph";
+            cell.appendChild(a);
+            cell.appendChild(document.createTextNode(")"));
         }
 
         function make_ratio_cell(ratio) {
@@ -152,18 +236,25 @@ function update_ui() {
         let this_year_fraction = gComputedData.names_this_year[name].fraction;
         make_cell(make_percent(this_year_fraction));
         let highest_year_fraction = gComputedData.names_highest_fraction[name];
-        make_cell(`${make_percent(highest_year_fraction.fraction)} (${highest_year_fraction.year})`);
+        let c = make_cell(`${make_percent(highest_year_fraction.fraction)} (${highest_year_fraction.year})`);
+        append_graph_link(c, name, "fraction");
         make_ratio_cell(this_year_fraction / highest_year_fraction.fraction);
 
         let this_year_count = gComputedData.names_this_year[name].count;
         make_cell(this_year_count);
         let highest_year_count = gComputedData.names_highest_count[name];
-        make_cell(`${highest_year_count.count} (${highest_year_count.year})`);
+        c = make_cell(`${highest_year_count.count} (${highest_year_count.year})`);
+        append_graph_link(c, name, "count");
         make_ratio_cell(this_year_count / highest_year_count.count);
 
         names_table.appendChild(tr);
     }
+}
 
+function show_graph(name, type) {
+    gState.graphName = name;
+    gState.graphType = type;
+    state_changed();
 }
 
 var gComputedData = {
@@ -262,6 +353,7 @@ function read_names_data() {
 </select>
 <select id="year"><option value="loading">Loading...</option></select>
 
+<section id="section-name-table">
 <table border>
 <thead>
   <tr>
@@ -280,3 +372,17 @@ function read_names_data() {
   </tr>
 </thead>
 <tbody id="names"></tbody></table>
+</section>
+
+<section id="section-graph">
+  <h1><span id="graph-name"></span> over time</h1>
+  <canvas id="graph-canvas" height="200" width="800"></canvas>
+  <table border>
+    <thead>
+      <th>Year</th>
+      <th id="graph-type"></th>
+    </thead>
+    <tbody id="graph-table">
+    </tbody>
+  </table>
+</section>
